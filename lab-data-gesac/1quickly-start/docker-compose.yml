@@ -120,6 +120,7 @@ services:
         psql -v ON_ERROR_STOP=1 -c "SELECT setval('erp.user_info_id_seq', (SELECT MAX(id) FROM erp.user_info))"
         psql -v ON_ERROR_STOP=1 -c "SELECT setval('erp.sku_info_id_seq', (SELECT MAX(id) FROM erp.sku_info))"
         psql -v ON_ERROR_STOP=1 -c "SELECT setval('erp.order_info_id_seq', (SELECT MAX(id) FROM erp.order_info))"
+        psql -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'paimon_cdc_publication' AND NOT puballtables) THEN DROP PUBLICATION paimon_cdc_publication; END IF; IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'paimon_cdc_publication') THEN CREATE PUBLICATION paimon_cdc_publication FOR ALL TABLES; END IF; END \$\$;"
 
   kafka:
     image: apache/kafka:3.9.2

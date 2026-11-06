@@ -18,13 +18,15 @@ flink run-application \
     --partition_keys dt \
     --primary_keys dt,id \
     --postgres_conf hostname=postgresql \
-    --postgres_conf username=app_user \
-    --postgres_conf password=app_password \
+    --postgres_conf username=dsj_cdc \
+    --postgres_conf password=dsj_cdc_password \
     --postgres_conf database-name=app_db \
     --postgres_conf schema-name=erp \
     --postgres_conf table-name='order_info' \
     --postgres_conf slot.name='paimon_cdc' \
     --postgres_conf decoding.plugin.name=pgoutput \
+    --postgres_conf debezium.publication.name=paimon_cdc_publication \
+    --postgres_conf debezium.publication.autocreate.mode=disabled \
     --catalog-conf metastore=hive \
     --catalog-conf uri=thrift://hive-metastore:9083 \
     --table-conf bucket=2 \
