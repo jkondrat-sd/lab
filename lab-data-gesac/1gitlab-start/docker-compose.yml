@@ -10,7 +10,7 @@ services:
       - "2224:22"
     environment:
       TZ: Asia/Shanghai
-      GITLAB_ROOT_PASSWORD: root_password
+      GITLAB_ROOT_PASSWORD: "Abc123789!#%"
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://localhost:8929'
         gitlab_rails['gitlab_shell_ssh_port'] = 2224
@@ -19,7 +19,20 @@ services:
       - gitlab-logs:/var/log/gitlab
       - gitlab-data:/var/opt/gitlab
 
+  gitlab-runner:
+    image: gitlab/gitlab-runner:19.6.0-pre.2431.g7f6cf1f5
+    container_name: gitlab-runner
+    restart: unless-stopped
+    depends_on:
+      gitlab:
+        condition: service_healthy
+    volumes:
+      - gitlab-runner-config:/etc/gitlab-runner
+      - ./gitlab-runner/config/config.toml:/etc/gitlab-runner/config.toml
+      - /var/run/docker.sock:/var/run/docker.sock
+
 volumes:
   gitlab-config:
   gitlab-logs:
   gitlab-data:
+  gitlab-runner-config:
