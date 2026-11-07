@@ -1,0 +1,79 @@
+source:
+   type: postgres
+   name: Postgres Source
+   hostname: postgresql
+   port: 5432
+   username: dsj_cdc
+   password: dsj_cdc_password
+   # 需要确保所有的表来自同一个database
+   tables: app_db.erp.\.*
+   # 避免 YARN 容器的系统时区差异导致 TIMESTAMP 解析偏移。
+   server-time-zone: Asia/Shanghai
+
+   # 首次全量快照，随后持续消费 WAL；恢复时从 checkpoint 中保存的位点继续。
+   scan.startup.mode: initial
+   # 在低频写入场景推进 replication slot 的 confirmed_flush_lsn，防止 WAL 堆积。
+   heartbeat.interval: 30s
+   connect.timeout: 30s
+   connect.max-retries: 3
+
+   decoding.plugin.name: pgoutput
+   # replication slot 是单消费者资源；同一 slot 不能同时被其他 CDC 作业使用。
+   slot.name: pgtest
+   # pgoutput 必须从 publication 读取变更。该 publication 由 app_user 预先创建，
+   # dsj_cdc 不需要也不应拥有 CREATE ON DATABASE 权限。
+   debezium.publication.name: paimon_cdc_publication
+   debezium.publication.autocreate.mode: disabled
+
+sink:
+  type: paimon
+  name: Paimon Sink
+  catalog.properties.metastore: hive
+  catalog.properties.uri: thrift://hive-metastore:9083
+  catalog.properties.warehouse: hdfs://namenode:9000/paimon/hive
+  # 为此 CDC 作业使用独立提交身份，避免同一 catalog 中多作业提交冲突。
+  commit.user: cdc_pg_erp
+  # 不以高基数 id 分区；如需分区，请改为各表共有的低基数日期字段。
+  # partition.key: erp.order_info:dt
+
+  # 与 pipeline 并行度保持一致；生产环境请按数据量、热点和小文件情况分别调优。
+  table.properties.bucket: 2
+  table.properties.sink.parallelism: 2
+
+  # PostgreSQL CDC 提供完整变更流，保留变更日志以供下游流式消费。
+  table.properties.changelog-producer: input
+  table.properties.precommit-compact: true
+
+  # 防止持续 CDC 写入累积过多快照、元数据和历史数据文件。
+  table.properties.snapshot.time-retained: 7 d
+  table.properties.snapshot.num-retained.min: 20
+  table.properties.snapshot.num-retained.max: 168
+  table.properties.snapshot.expire.execution-mode: async
+
+  table.properties.target-file-size: 128 mb
+  table.properties.metastore.partitioned-table: true
+
+route:
+  # app_db.erp.user_info -> erp.ods_user_info_cdc
+  - source-table: app_db.erp.\.*
+    sink-table: erp.ods_<>_cdc
+    replace-symbol: <>
+    description: 为 erp 源表添加 ods_ 前缀和 _cdc 后缀
+
+transform:
+  # 匹配 erp 下具有 id、create_time 的表；派生出的 dt 用于按天分区。
+  - source-table: app_db.erp.\.*
+    projection: "*, DATE_FORMAT(create_time, 'yyyy-MM-dd') AS dt"
+    primary-keys: dt,id
+    partition-keys: dt
+    description: 从 erp 表的 create_time 派生 dt 并按天分区
+
+pipeline:
+  name: Postgres to Paimon Pipeline
+  parallelism: 2
+  # LENIENT	宽松处理	尽可能兼容结构变化，默认值
+  # EVOLVE	严格同步	尽可能让下游结构与上游保持一致
+  # TRY_EVOLVE	尝试同步	尝试执行结构变更，失败时采用回退策略
+  # IGNORE	忽略变更	不将 Schema 变更传递给下游
+  # EXCEPTION	遇到变更报错	发现结构变化就抛出异常
+  schema.change.behavior: lenient
