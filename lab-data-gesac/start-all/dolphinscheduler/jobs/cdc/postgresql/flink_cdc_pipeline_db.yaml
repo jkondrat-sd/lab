@@ -7,6 +7,8 @@ source:
    password: dsj_cdc_password
    # 需要确保所有的表来自同一个database
    tables: app_db.erp.\.*
+   # 保留 database 名称，使 route 可匹配 app_db.erp.<table> 三段式 Table ID。
+   table-id.include-database: true
    # 避免 YARN 容器的系统时区差异导致 TIMESTAMP 解析偏移。
    server-time-zone: Asia/Shanghai
 
@@ -18,6 +20,9 @@ source:
    connect.max-retries: 3
 
    decoding.plugin.name: pgoutput
+   # 从 pgoutput Relation 消息推断新增、删除、重命名列及列类型变更，
+   # 并向 pipeline 发送 schema-change 事件。
+   schema-change.enabled: true
    # replication slot 是单消费者资源；同一 slot 不能同时被其他 CDC 作业使用。
    slot.name: pgtest
    # pgoutput 必须从 publication 读取变更。该 publication 由 app_user 预先创建，
@@ -28,6 +33,12 @@ source:
 sink:
   type: paimon
   name: Paimon Sink
+  # 对已存在的 Paimon 表校验并安全扩展缺失的非主键列/兼容类型，
+  # 避免首次 CreateTableEvent 因目标表已存在而忽略 schema 对齐。
+  existing-table.schema-expansion.mode: "EXPAND"
+  # 仅同步建表及非破坏性的列变更；未列出的删除和 truncate 事件不会传递，
+  # 防止误删落湖数据。
+  include.schema.changes: [create.table, add.column, alter.column.type, rename.column]
   catalog.properties.metastore: hive
   catalog.properties.uri: thrift://hive-metastore:9083
   catalog.properties.warehouse: hdfs://namenode:9000/paimon/hive
@@ -71,9 +82,6 @@ transform:
 pipeline:
   name: Postgres to Paimon Pipeline
   parallelism: 2
-  # LENIENT	宽松处理	尽可能兼容结构变化，默认值
-  # EVOLVE	严格同步	尽可能让下游结构与上游保持一致
-  # TRY_EVOLVE	尝试同步	尝试执行结构变更，失败时采用回退策略
-  # IGNORE	忽略变更	不将 Schema 变更传递给下游
-  # EXCEPTION	遇到变更报错	发现结构变化就抛出异常
-  schema.change.behavior: lenient
+  # 将 source 推断出的 schema 变更应用到 Paimon；不支持的变更使作业失败，
+  # 以避免数据与表结构静默不一致。
+  schema.change.behavior: evolve

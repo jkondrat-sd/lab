@@ -116,6 +116,9 @@ services:
             -e 's/REPLACE INTO/INSERT INTO/g' \
             "$${init_script}" | psql -v ON_ERROR_STOP=1
         done
+        # 业务表由上面的兼容转换导入后，再启用完整的逻辑复制旧行镜像。
+        # Flink CDC 处理 UPDATE / DELETE 时需要该 before image。
+        psql -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/010-erp-replica-identity.sql
         psql -v ON_ERROR_STOP=1 -c "SELECT setval('app_db.example_items_id_seq', (SELECT MAX(id) FROM app_db.example_items))"
         psql -v ON_ERROR_STOP=1 -c "SELECT setval('erp.user_info_id_seq', (SELECT MAX(id) FROM erp.user_info))"
         psql -v ON_ERROR_STOP=1 -c "SELECT setval('erp.sku_info_id_seq', (SELECT MAX(id) FROM erp.sku_info))"
@@ -211,7 +214,9 @@ services:
       start_period: 60s
 
   namenode:
-    image: apache/hadoop:3.3.6
+    build:
+      context: ./hadoop
+    image: hadoop-java11:3.3.6
     container_name: namenode
     hostname: namenode
     restart: unless-stopped
@@ -242,7 +247,9 @@ services:
       HDFS_NAMENODE_OPTS: -Xmx384m
 
   datanode:
-    image: apache/hadoop:3.3.6
+    build:
+      context: ./hadoop
+    image: hadoop-java11:3.3.6
     container_name: datanode
     hostname: datanode
     restart: unless-stopped
@@ -272,7 +279,9 @@ services:
       - namenode
 
   resourcemanager:
-    image: apache/hadoop:3.3.6
+    build:
+      context: ./hadoop
+    image: hadoop-java11:3.3.6
     container_name: resourcemanager
     hostname: resourcemanager
     restart: unless-stopped
@@ -294,7 +303,9 @@ services:
       - datanode
 
   nodemanager:
-    image: apache/hadoop:3.3.6
+    build:
+      context: ./hadoop
+    image: hadoop-java11:3.3.6
     container_name: nodemanager
     hostname: nodemanager
     restart: unless-stopped

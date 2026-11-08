@@ -2,8 +2,19 @@ FROM apache/dolphinscheduler-standalone-server:3.4.2
 
 USER root
 
+# Flink CDC 3.7.0 is built with Java 11, while the DolphinScheduler base image
+# ships with Java 8.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openjdk-11-jre-headless \
+    && ln -s /usr/lib/jvm/java-11-openjdk-$(dpkg --print-architecture) /opt/java/openjdk-11 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/opt/java/openjdk-11
+ENV PATH=${JAVA_HOME}/bin:${PATH}
+
 ARG FLINK_VERSION=1.20.4
-ARG FLINK_CDC_VERSION=3.5.0
+ARG FLINK_CDC_VERSION=3.7.0
+ARG FLINK_CDC_FLINK_MINOR_VERSION=1.20
 ARG HADOOP_VERSION=3.2.1
 ARG MYSQL_CONNECTOR_VERSION=8.0.33
 ARG PAIMON_FLINK_MINOR_VERSION=1.20
@@ -27,9 +38,9 @@ RUN tar -xzf /tmp/flink.tgz -C /opt \
 
 # Flink CDC CLI.  It uses FLINK_HOME below as the Flink/YARN client and keeps
 # its pipeline connectors in its own lib directory.
-COPY dep/flink-cdc-${FLINK_CDC_VERSION}-bin.tar.gz /tmp/flink-cdc.tgz
+COPY dep/flink-cdc-${FLINK_CDC_VERSION}-${FLINK_CDC_FLINK_MINOR_VERSION}-bin.tar.gz /tmp/flink-cdc.tgz
 RUN tar -xzf /tmp/flink-cdc.tgz -C /opt \
-    && mv /opt/flink-cdc-${FLINK_CDC_VERSION} /opt/flink-cdc \
+    && mv /opt/flink-cdc-${FLINK_CDC_VERSION}-${FLINK_CDC_FLINK_MINOR_VERSION} /opt/flink-cdc \
     && test -x /opt/flink-cdc/bin/flink-cdc.sh \
     && rm /tmp/flink-cdc.tgz
 
@@ -37,12 +48,12 @@ COPY dep/flink-yarn-${FLINK_VERSION}.jar /opt/flink/lib/
 COPY dep/paimon-flink-${PAIMON_FLINK_MINOR_VERSION}-${PAIMON_FLINK_VERSION}.jar /opt/flink/lib/
 COPY dep/flink-sql-connector-hive-3.1.3_2.12-${FLINK_VERSION}.jar /opt/flink/lib/
 COPY dep/mysql-connector-j-${MYSQL_CONNECTOR_VERSION}.jar /opt/flink/lib/
-COPY dep/flink-sql-connector-mysql-cdc-3.5.0.jar /opt/flink/lib/
-COPY dep/flink-sql-connector-postgres-cdc-3.5.0.jar /opt/flink/lib/
-COPY dep/flink-cdc-pipeline-connector-postgres-3.5.0.jar /opt/flink/lib/
-COPY dep/flink-cdc-pipeline-connector-paimon-3.5.0.jar /opt/flink/lib/
-COPY dep/flink-cdc-pipeline-connector-postgres-3.5.0.jar /opt/flink-cdc/lib/
-COPY dep/flink-cdc-pipeline-connector-paimon-3.5.0.jar /opt/flink-cdc/lib/
+COPY dep/flink-sql-connector-mysql-cdc-${FLINK_CDC_VERSION}-${FLINK_CDC_FLINK_MINOR_VERSION}.jar /opt/flink/lib/
+COPY dep/flink-sql-connector-postgres-cdc-${FLINK_CDC_VERSION}-${FLINK_CDC_FLINK_MINOR_VERSION}.jar /opt/flink/lib/
+COPY dep/flink-cdc-pipeline-connector-postgres-${FLINK_CDC_VERSION}-${FLINK_CDC_FLINK_MINOR_VERSION}.jar /opt/flink/lib/
+COPY dep/flink-cdc-pipeline-connector-paimon-${FLINK_CDC_VERSION}-${FLINK_CDC_FLINK_MINOR_VERSION}.jar /opt/flink/lib/
+COPY dep/flink-cdc-pipeline-connector-postgres-${FLINK_CDC_VERSION}-${FLINK_CDC_FLINK_MINOR_VERSION}.jar /opt/flink-cdc/lib/
+COPY dep/flink-cdc-pipeline-connector-paimon-${FLINK_CDC_VERSION}-${FLINK_CDC_FLINK_MINOR_VERSION}.jar /opt/flink-cdc/lib/
 COPY dep/flink-connector-kafka-3.4.0-1.20.jar /opt/flink/lib/
 COPY dep/kafka-clients-3.9.2.jar /opt/flink/lib/
 COPY dep/paimon-hive-connector-3.1-2.0.0.jar /opt/flink/lib/
